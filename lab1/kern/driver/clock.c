@@ -42,8 +42,13 @@ void clock_init(void) {
 
     // initialize time counter 'ticks' to zero
     ticks = 0;
-
     cprintf("++ setup timer interrupts\n");
+    
+    __asm__ __volatile__("mret"); // 触发非法伪指命异常
+    __asm__ __volatile__("ebreak"); // 触发断点异常
 }
 
 void clock_set_next_event(void) { sbi_set_timer(get_cycles() + timebase); }
+
+
+

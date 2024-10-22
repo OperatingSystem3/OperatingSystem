@@ -142,7 +142,7 @@ best_fit_alloc_pages(size_t n) {
         if (page->property > n) {
             struct Page *p = page + n;  // 获取剩余页面的起始地址
             p->property = page->property - n;  // 设置剩余页面的属性
-            SetPageProperty(p);  // 更新剩余页面的状态
+            SetPageProperty(p);
             list_add(prev, &(p->page_link));  // 将剩余页面插入链表
         }
         
@@ -167,7 +167,7 @@ best_fit_free_pages(struct Page *base, size_t n) {
     /*LAB2 EXERCISE 2: 2212032 */ 
     // 编写代码：具体来说就是设置当前页块的属性为释放的页块数、并将当前页块标记为已分配状态、最后增加nr_free的值
     base->property = n;  // 设置当前页块的属性为释放的页数
-    SetPageProperty(base);  // 标记当前页块为已分配
+    SetPageProperty(base);
     nr_free += n;  // 增加空闲页块总数
     /*LAB2 EXERCISE 2: 2212032 */ 
 

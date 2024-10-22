@@ -8,8 +8,10 @@
 #include <riscv.h>
 #include <stdio.h>
 #include <trap.h>
+#include <sbi.h>
 
 #define TICK_NUM 100
+volatile size_t num=0;
 
 static void print_ticks() {
     cprintf("%d ticks\n", TICK_NUM);
@@ -125,11 +127,19 @@ void interrupt_handler(struct trapframe *tf) {
             // directly.
             // cprintf("Supervisor timer interrupt\n");
             // clear_csr(sip, SIP_STIP);
+
+            /* LAB1 EXERCISE2  2212449 */
             clock_set_next_event();
             if (++ticks % TICK_NUM == 0) {
                 print_ticks();
+                num++;
+            }
+            if(num==10){
+                sbi_shutdown();
             }
             break;
+            /* LAB1 EXERCISE2  2212449 */
+
         case IRQ_H_TIMER:
             cprintf("Hypervisor software interrupt\n");
             break;
@@ -161,8 +171,26 @@ void exception_handler(struct trapframe *tf) {
         case CAUSE_FAULT_FETCH:
             break;
         case CAUSE_ILLEGAL_INSTRUCTION:
+            /* LAB1 CHALLLENGE3   YOUR CODE 2211123 */
+            // 非法指令异常处理
+            /*(1)输出指令异常类型（ Illegal instruction）
+             *(2)输出异常指令地址
+             *(3)更新 tf->epc寄存器
+            */
+            cprintf("Exception type:Illegal instruction\n");
+            cprintf("Illegal instruction caught at 0x%08x\n", tf->epc);
+            tf->epc+=4;
             break;
         case CAUSE_BREAKPOINT:
+            //断点异常处理
+            /* LAB1 CHALLLENGE3   YOUR CODE 2211123 */
+            /*(1)输出指令异常类型（ breakpoint）
+             *(2)输出异常指令地址
+             *(3)更新 tf->epc寄存器
+            */
+            cprintf("Exception type: breakpoint\n");
+            cprintf("ebreak caught at 0x%08x\n", tf->epc);
+            tf->epc+=2;     //断点异常指令占两个字节  
             break;
         case CAUSE_MISALIGNED_LOAD:
             break;

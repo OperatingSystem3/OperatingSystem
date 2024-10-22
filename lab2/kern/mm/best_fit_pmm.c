@@ -55,7 +55,7 @@
  *               (5.2) reset the fields of pages, such as p->ref, p->flags (PageProperty)
  *               (5.3) try to merge low addr or high addr blocks. Notice: should change some pages's p->property correctly.
  */
-free_area_t free_area;
+extern free_area_t free_area;
 
 #define free_list (free_area.free_list)
 #define nr_free (free_area.nr_free)
@@ -73,8 +73,12 @@ best_fit_init_memmap(struct Page *base, size_t n) {
     for (; p != base + n; p ++) {
         assert(PageReserved(p));
 
-        /*LAB2 EXERCISE 2: YOUR CODE*/ 
+        /*LAB2 EXERCISE 2: 2212032 */ 
         // 清空当前页框的标志和属性信息，并将页框的引用计数设置为0
+        p->flags = 0;
+        p->property = 0;
+        set_page_ref(p, 0);
+        /*LAB2 EXERCISE 2: 2212032 */ 
     }
     base->property = n;
     SetPageProperty(base);
@@ -85,97 +89,137 @@ best_fit_init_memmap(struct Page *base, size_t n) {
         list_entry_t* le = &free_list;
         while ((le = list_next(le)) != &free_list) {
             struct Page* page = le2page(le, page_link);
-             /*LAB2 EXERCISE 2: YOUR CODE*/ 
-            // 编写代码
+            /*LAB2 EXERCISE 2: 2212032 */ 
             // 1、当base < page时，找到第一个大于base的页，将base插入到它前面，并退出循环
+            if (base < page) {
+                list_add_before(le, &(base->page_link));
+                break;
+            }
             // 2、当list_next(le) == &free_list时，若已经到达链表结尾，将base插入到链表尾部
+            else if (list_next(le) == &free_list) {
+                list_add(le, &(base->page_link));
+            }
+            /*LAB2 EXERCISE 2: 2212032 */ 
+            
         }
     }
 }
 
 static struct Page *
 best_fit_alloc_pages(size_t n) {
-    assert(n > 0);
+    assert(n > 0); // 确保请求的页面数量大于0
     if (n > nr_free) {
-        return NULL;
+        return NULL; // 如果请求的页面数量超过可用页面，返回NULL
     }
-    struct Page *page = NULL;
-    list_entry_t *le = &free_list;
-    size_t min_size = nr_free + 1;
-     /*LAB2 EXERCISE 2: YOUR CODE*/ 
+    struct Page *page = NULL; // 用于存放找到的页面
+    list_entry_t *le = &free_list; // 初始化链表入口
+    size_t min_size = nr_free + 1; // 初始化最小连续空闲页框的数量
+    
+    /*LAB2 EXERCISE 2: 2212032 */ 
     // 下面的代码是first-fit的部分代码，请修改下面的代码改为best-fit
     // 遍历空闲链表，查找满足需求的空闲页框
     // 如果找到满足需求的页面，记录该页面以及当前找到的最小连续空闲页框数量
+    // 修改了遍历链表的逻辑，使其记录满足请求并且最小的可用页面
+    // 使用 min_size 来跟踪找到的最小连续空闲页框的数量
+    // 遍历空闲链表，查找满足需求的空闲页框
     while ((le = list_next(le)) != &free_list) {
         struct Page *p = le2page(le, page_link);
-        if (p->property >= n) {
-            page = p;
-            break;
+        
+        // 如果找到满足需求的页面，并且它比当前min_size小
+        if (p->property >= n && p->property < min_size) {
+            page = p;        // 记录当前找到的页面
+            min_size = p->property;  // 更新最小连续空闲页框的数量
         }
     }
+    /*LAB2 EXERCISE 2: 2212032 */ 
 
+    // 如果找到了合适的页面进行分配
     if (page != NULL) {
-        list_entry_t* prev = list_prev(&(page->page_link));
-        list_del(&(page->page_link));
+        list_entry_t* prev = list_prev(&(page->page_link));  // 获取前一个链表节点
+        list_del(&(page->page_link));  // 从链表中删除找到的页面
+        
+        // 如果剩余的页面数量大于请求的数量，则需要分割
         if (page->property > n) {
-            struct Page *p = page + n;
-            p->property = page->property - n;
-            SetPageProperty(p);
-            list_add(prev, &(p->page_link));
+            struct Page *p = page + n;  // 获取剩余页面的起始地址
+            p->property = page->property - n;  // 设置剩余页面的属性
+            SetPageProperty(p);  // 更新剩余页面的状态
+            list_add(prev, &(p->page_link));  // 将剩余页面插入链表
         }
-        nr_free -= n;
-        ClearPageProperty(page);
+        
+        nr_free -= n;  // 更新总的空闲页面数量
+        ClearPageProperty(page);  // 清除已分配页面的属性
     }
-    return page;
+    return page; // 返回分配的页面
 }
 
 static void
 best_fit_free_pages(struct Page *base, size_t n) {
-    assert(n > 0);
+    assert(n > 0); // 确保释放的页数大于0
     struct Page *p = base;
-    for (; p != base + n; p ++) {
-        assert(!PageReserved(p) && !PageProperty(p));
-        p->flags = 0;
-        set_page_ref(p, 0);
-    }
-    /*LAB2 EXERCISE 2: YOUR CODE*/ 
-    // 编写代码
-    // 具体来说就是设置当前页块的属性为释放的页块数、并将当前页块标记为已分配状态、最后增加nr_free的值
 
-    if (list_empty(&free_list)) {
+    // 遍历当前要释放的页块，将每个页的标志清零并设置引用计数为0
+    for (; p != base + n; p ++) {
+        assert(!PageReserved(p) && !PageProperty(p)); // 确保页块没有被保留且没有属性标记
+        p->flags = 0; // 清除页的标志
+        set_page_ref(p, 0); // 设置引用计数为0
+    }
+
+    /*LAB2 EXERCISE 2: 2212032 */ 
+    // 编写代码：具体来说就是设置当前页块的属性为释放的页块数、并将当前页块标记为已分配状态、最后增加nr_free的值
+    base->property = n;  // 设置当前页块的属性为释放的页数
+    SetPageProperty(base);  // 标记当前页块为已分配
+    nr_free += n;  // 增加空闲页块总数
+    /*LAB2 EXERCISE 2: 2212032 */ 
+
+    if (list_empty(&free_list)) { // 如果空闲链表为空，直接添加当前页块
         list_add(&free_list, &(base->page_link));
     } else {
         list_entry_t* le = &free_list;
+        // 找到合适的位置插入当前页块，以保持链表的顺序
         while ((le = list_next(le)) != &free_list) {
             struct Page* page = le2page(le, page_link);
             if (base < page) {
-                list_add_before(le, &(base->page_link));
+                list_add_before(le, &(base->page_link)); // 在找到的页面之前插入当前页块
                 break;
             } else if (list_next(le) == &free_list) {
-                list_add(le, &(base->page_link));
+                list_add(le, &(base->page_link)); // 如果到达链表尾部，则在尾部插入
             }
         }
     }
-
+    
+    // 检查前一个空闲页块，尝试合并
     list_entry_t* le = list_prev(&(base->page_link));
     if (le != &free_list) {
         p = le2page(le, page_link);
-        /*LAB2 EXERCISE 2: YOUR CODE*/ 
-         // 编写代码
+
+        /*LAB2 EXERCISE 2: 2212032 */ 
+
         // 1、判断前面的空闲页块是否与当前页块是连续的，如果是连续的，则将当前页块合并到前面的空闲页块中
         // 2、首先更新前一个空闲页块的大小，加上当前页块的大小
         // 3、清除当前页块的属性标记，表示不再是空闲页块
         // 4、从链表中删除当前页块
         // 5、将指针指向前一个空闲页块，以便继续检查合并后的连续空闲页块
+
+        // 判断前面的空闲页块是否与当前页块是连续的
+        if (p + p->property == base) {
+            // 合并前一个空闲页块和当前页块
+            p->property += base->property;  // 更新前一个空闲页块的大小
+            ClearPageProperty(base);  // 清除当前页块的属性标记
+            list_del(&(base->page_link));  // 从链表中删除当前页块
+            base = p;  // 更新指针，继续检查合并后的连续空闲页块
+        }
+        /*LAB2 EXERCISE 2: 2212032 */ 
     }
 
+    // 检查后一个空闲页块，尝试合并
     le = list_next(&(base->page_link));
     if (le != &free_list) {
         p = le2page(le, page_link);
+        // 判断后面的空闲页块是否与当前页块是连续的
         if (base + base->property == p) {
-            base->property += p->property;
-            ClearPageProperty(p);
-            list_del(&(p->page_link));
+            base->property += p->property;  // 合并当前页块和后一个空闲页块
+            ClearPageProperty(p);  // 清除后一个空闲页块的属性标记
+            list_del(&(p->page_link));  // 从链表中删除后一个空闲页块
         }
     }
 }

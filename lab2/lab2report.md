@@ -680,6 +680,216 @@ buddy_check(void) {
 ![](img/lab2-3.png)
 
 ## 扩展练习Challenge：任意大小的内存单元slub分配算法（需要编程）
+slub算法，实现两层架构的高效内存单元分配，第一层是基于页大小的内存分配，第二层是在第一层基础上实现基于任意大小的内存分配。可简化实现，能够体现其主体思想即可。
+
+参考linux的slub分配算法/，在ucore中实现slub分配算法。要求有比较充分的测试用例说明实现的正确性，需要有设计文档。
+
+### 1. 概述
+小块内存的分配和管理是通过块分配器来实现的。目前内核中，有三种方式来实现小块内存分配：slab, slub, slob，最先有slab分配器，slub/slob分配器是改进版，slob分配器适用于小内存嵌入式设备，而slub分配器目前已逐渐成为主流块分配器。
+
+我们没法规定每次都按照页来分配空间，假如用户进程需要500Byte的话，那么伙伴系统将会拿出1个page(这可能是大多数情况)，也就是4096Byte的空间给它，就会造成空间的浪费。所以我们需要在伙伴系统之上，搭建一个能够管理整个块，使其能够以更小单位分配空间的管理器。
+
+这就是slub(或者是slab、slob)，slub能帮助我们在更小粒度上分配空间。
+
+另外，因为我们的操作系统常常需要管理各种各样的数据结构，例如网络数据包、文件描述符、进程描述块等等，大多数情况下，我们是知道它们的大小的、甚至能够猜测可能的数量；因此，如果用一个管理器——slub，去管理可用空间，使其能够符合这些大小，就能够大大减少内存碎片！
+
+![](img/lab3-1.png)
+
+### 2. 数据结构分析
+有四个关键的数据结构：
+
+- **struct kmem_cache：**
+用于管理SLAB缓存，包括该缓存中对象的信息描述，per-CPU/Node管理slab页面等；
+
+- **struct kmem_cache_cpu：**
+用于管理每个CPU的slab页面，可以使用无锁访问，提高缓存对象分配速度；
+
+- **struct kmem_cache_node：**
+用于管理每个Node的slab页面，由于每个Node的访问速度不一致，slab页面由Node来管理；
+
+- **struct page：**
+用于描述slab页面，struct page结构体中很多字段都是通过union联合体进行复用的。
+
+![](img/lab3-2.png)
+### 3. 实现思路代码
+
+具体而言分为两个层次，第一个层次便是前面实现的伙伴系统，对于第二个层次：
+
+SLUB算法基于一个包含多个kmem_cache_t数组的结构，这些数组的主要区别在于它们的偏移量，从而支持不同大小的内存块分配。每个组分别能够分配的字节数为2\^3到2\^11字节，此外，还有两个特殊组用于96B和192B的分配，形成共11组。该算法的核心模块包括内存块分配需求计算、连续页大小的计算、请求分配和释放机制。内存块的分配遵循向上取整的原则，以满足请求的最小字节数；在页大小计算中，算法利用伙伴系统来确定满足碎片阈值的连续页。分配过程中，若CPU的空闲链表为空，算法会请求伙伴系统分配新的连续页，并更新对应的节点状态。释放时，算法会根据内存块的所在位置（CPU、full或partial链表）进行相应的链表更新和内存页的返回，确保每次分配和释放操作后都能及时更新CPU状态，并在需要时向伙伴系统请求新的连续页以维持内存管理的高效性。
+
+1. **slub缓存创建**
+
+在内核中通过kmem_cache_create接口来创建一个slab缓存。
+
+- **①**kmem_cache_create完成的功能比较简单，就是创建一个用于管理slab缓存的kmem_cache结构，并对该结构体进行初始化，最终添加到全局链表中。kmem_cache结构体初始化，包括了上文中分析到的kmem_cache_cpu和kmem_cache_node两个字段结构。
+
+- **②**在创建的过程中，当发现已有的slab缓存中，有存在对象大小相近，且具有兼容标志的slab缓存，那就只需要进行merge操作并返回，而无需进一步创建新的slab缓存。
+
+- **③**calculate_sizes函数会根据指定的force_order或根据对象大小去计算kmem_cache结构体中的size/min/oo等值，其中kmem_cache_order_objects结构体，是由页面分配order值和对象数量两者通过位域拼接起来的。
+
+- **④**在创建slab缓存的时候，有一个先鸡后蛋的问题：kmem_cache结构体来管理一个slab缓存，而创建kmem_cache结构体又是从slab缓存中分配出来的对象，那么这个问题是怎么解决的呢？可以看一下kmem_cache_init函数，内核中定义了两个静态的全局变量kmem_cache和kmem_cache_node，在kmem_cache_init函数中完成了这两个结构体的初始化之后，相当于就是创建了两个slab缓存，一个用于分配kmem_cache结构体对象的缓存池，一个用于分配kmem_cache_node结构体对象的缓存池。由于kmem_cache_cpu结构体是通过__alloc_percpu来分配的，因此不需要创建一个相关的slab缓存。
+
+```c
+static void
+slub_init(void)
+{   buddy_init();//初始化所有空闲链表
+    init_kmallo_caches();//初始化前三个总框
+}
+
+static void slub_init_memap(struct Page *base, size_t n)
+{
+    buddy_init_memmap(base,n);//初始化分配近乎所有的内存空间
+}
+/*分割页面*/
+static list_entry_t *splitPageToBlocks(void*pageStart,size_t blockSize,size_t numBlocks)
+{
+    list_entry_t* head = (list_entry_t*)pageStart; // 第一个块
+    list_entry_t* current = head;
+    for (size_t i = 1; i < numBlocks; i++) {
+        list_entry_t* nextBlock = (list_entry_t*)((char*)current + blockSize);
+        current->next = nextBlock;
+        current = nextBlock;
+    }
+    current->next = NULL; // 最后一个块的next指向NULL
+    return head;
+}
+```
+
+2. **slub对象分配**
+
+kmem_cache_alloc接口用于从slab缓存池中分配对象。
+
+分配slab对象与Buddy System中分配页面类似，存在快速路径和慢速路径两种，所谓的快速路径就是per-CPU缓存，可以无锁访问，因而效率更高。
+
+整体的分配流程大体是这样的：优先从per-CPU缓存中进行分配，如果per-CPU缓存中已经全部分配完毕，则从Node管理的slab页面中迁移slab页到per-CPU缓存中，再重新分配。当Node管理的slab页面也不足的情况下，则从Buddy System中分配新的页面，添加到per-CPU缓存中。
+
+- **fastpath**
+快速路径下，以原子的方式检索per-CPU缓存的freelist列表中的第一个对象，如果freelist为空并且没有要检索的对象，则跳入慢速路径操作，最后再返回到快速路径中重试操作。
+
+- **slowpath-1**
+将per-CPU缓存中page指向的slab页中的空闲对象迁移到freelist中，如果有空闲对象，则freeze该页面，没有空闲对象则跳转到slowpath-2。
+
+- **slowpath-2**
+将per-CPU缓存中partial链表中的第一个slab页迁移到page指针中，如果partial链表为空，则跳转到slowpath-3。
+
+- **slowpath-3**
+将Node管理的partial链表中的slab页迁移到per-CPU缓存中的page中，并重复第二个slab页将其添加到per-CPU缓存中的partial链表中。如果迁移的slab中空闲对象超过了kmem_cache.cpu_partial的一半，则仅迁移slab页，并且不再重复。
+如果每个Node的partial链表都为空，跳转到slowpath-4。
+
+- **slowpath-4**
+从Buddy System中获取页面，并将其添加到per-CPU的page中。
+
+```c
+static void*slub_alloc_block(size_t size)/*只考虑分配比1页大小小的*/
+{
+    assert(size>0);
+    size_t x_size=calculate_x_size(size);
+    cprintf("The block acturally is:%d\n",x_size);
+    int i;
+    for(i=0;i<11;i++)
+    { 
+        if(kmallo_caches[i].offset==x_size)
+        {
+            break;
+        }
+    }
+   /*想要分配 先看cpu里有没有如果没有就需要从伙伴系统求，因为每次partial都会即使补充cpu*/
+   size_t n=calculate_bufferpool(x_size)/PGSIZE;/*计算出需要的页*/
+   cprintf("The size of bufferpool should be:%d\n",n);
+   if(kmallo_caches[i].cpu_slab->freelist.next==NULL){
+       struct Page*ALLOC_page=buddy_alloc_pages(n);/*得到对应首页的结构体*/
+       /*找到page对应的实际虚拟地址*/
+       uint64_t address=DRAM_BASE+(ALLOC_page-pages)*PGSIZE+va_pa_offset;
+       void* virtual_address=(void*)address;
+       /*链接object到page对应的实际虚拟地址*/
+       //计算一个连续页有多少个可用的objects,从而建立链表
+       size_t num_objects=(n*PGSIZE)/x_size;
+       kmallo_caches[i].cpu_slab->freelist.next=splitPageToBlocks(virtual_address, x_size, num_objects);
+       kmallo_caches[i].cpu_slab->page=ALLOC_page;
+       kmallo_caches[i].free_blocks=num_objects;
+       }
+       /*开始实现分配，每次从链表头取一个*/
+       cprintf("Address of p1: %p\n", (void*)kmallo_caches[i].cpu_slab->freelist.next);
+       list_entry_t*outcome=kmallo_caches[i].cpu_slab->freelist.next;
+       kmallo_caches[i].cpu_slab->freelist.next=outcome->next;
+       cprintf("Address of p1(after alloc): %p\n", (void*)kmallo_caches[i].cpu_slab->freelist.next);
+       kmallo_caches[i].free_blocks-=1;//空闲的少了一个
+       cprintf("kmallo_caches[%d].free_blocks=%d\n",i,kmallo_caches[i].free_blocks);
+       if(kmallo_caches[i].cpu_slab->freelist.next==NULL)/*刚分配完最后一个*/
+       {
+            list_add(&(kmallo_caches[i].node->page_link_full),&(kmallo_caches[i].cpu_slab->page->page_link));
+            kmallo_caches[i].cpu_slab->page=NULL;
+            kmallo_caches[i].node->nr_full+=1;
+            cprintf("kmallo_caches[%d].node->nr_full=%d\n",i,kmallo_caches[i].node->nr_full);
+         }
+       return outcome;
+   
+}
+```
+
+3. **slub对象释放**
+
+kmem_cache_free的操作，可以看成是kmem_cache_alloc的逆过程，因此也分为快速路径和慢速路径两种方式，同时，慢速路径中又分为了好几种情况，可以参考kmem_cache_alloc的过程。
+
+- **快速路径释放**
+快速路径下，直接将对象返回到freelist中即可。
+
+- **put_cpu_partial**
+put_cpu_partial函数主要是将一个刚freeze的slab页，放入到partial链表中。
+在put_cpu_partial函数中调用unfreeze_partials函数，这时候会将per-CPU管理的partial链表中的slab页面添加到Node管理的partial链表的尾部。如果超出了Node的partial链表，溢出的slab页面中没有分配对象的slab页面将会返回到伙伴系统。
+
+- **add_partial**
+添加slab页到Node的partial链表中。
+
+- **remove_partial**
+从Node的partial链表移除slab页。
+
+具体释放的流程走哪个分支，跟对象的使用情况，partial链表的个数nr_partial/min_partial等相关，细节就不再深入分析了。
+
+```c
+static void
+buddy_free_pages(struct Page *base, size_t n) {
+    assert(n > 0);
+    unsigned int pnum = 1 << (base->property);
+    assert(ROUNDUP2(n) == pnum);
+    unsigned int order = base->property;
+    struct Page* page=NULL;
+    unsigned long idx=base-buddy_start;
+    struct Page* buddy_page = NULL;
+
+    for(;order<max_order;order++)
+    {
+        //cprintf("idx:%d ",idx);
+        buddy_page=getBuddyPage(buddy_start+idx);
+        unsigned int buddy_idx=buddy_page-buddy_start;
+        //调试输出
+        //cprintf("oreder:%d  buddy_idx:%d  buddy_page->property:%d PageProperty(buddy_page):%d\n",order,buddy_idx,buddy_page->property,PageProperty(buddy_page));
+        if(buddy_page->property!=order||PageProperty(buddy_page)!=1){
+            break;
+        }
+        //如果能合并，伙伴页需做调整：可能不再是空闲页首；从空闲块中删除
+        buddy_page->property=0;
+        ClearPageProperty(buddy_page);
+        list_del(&(buddy_page->page_link));
+        (buddy_start+idx)->property=0;
+        ClearPageProperty(buddy_start+idx);
+
+        idx&=buddy_idx;  //一对伙伴块的父结点的索引
+        page=buddy_start+idx; 
+        page->property=order+1;
+    }
+
+    //page可能是指向原来的块，也可能是指向伙伴块(谁左谁右不一定)
+    //进行更新，将合并块存入空闲链表
+    page=buddy_start+idx; 
+    page->property=order;
+    SetPageProperty(page);
+    list_add(&(free_area[order].free_list),&(page->page_link));
+    total_nr_free += pnum;
+
+    return;
+}
+```
 
 ## 扩展练习Challenge：硬件的可用物理内存范围的获取方法（思考题）
 

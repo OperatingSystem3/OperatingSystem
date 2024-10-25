@@ -1,0 +1,13 @@
+{
+    "files.associations": {
+        "list.h": "c",
+        "pmm.h": "c",
+        "defs.h": "c",
+        "error.h": "c",
+        "slub.h": "c",
+        "buddy_system.h": "c",
+        "string.h": "c",
+        "default_pmm.h": "c"
+    },
+    "C_Cpp.errorSquiggles": "disabled"
+}

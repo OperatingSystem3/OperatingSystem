@@ -22,49 +22,15 @@ PMP1: 0x0000000000000000-0xffffffffffffffff (A,R,W,X)
 (THU.CST) os is loading ...
 Special kernel symbols:
   entry  0xffffffffc0200032 (virtual)
-  etext  0xffffffffc02016f4 (virtual)
+  etext  0xffffffffc02014d2 (virtual)
   edata  0xffffffffc0206018 (virtual)
-  end    0xffffffffc0254688 (virtual)
-Kernel executable memory footprint: 338KB
-memory management: buddy_pmm_manager
+  end    0xffffffffc0206960 (virtual)
+Kernel executable memory footprint: 27KB
+memory management: slub_pmm_manager
 physcial memory map:
   memory: 0x0000000007e00000, [0x0000000080200000, 0x0000000087ffffff].
-alloc page offset 0
-alloc page offset 1
-alloc page offset 2
-free page offset 0
-),free page offset 1
-),free page offset 2
-),alloc page offset 0
-alloc page offset 128
-p0 0xffffffffc025df48
-p1 0xffffffffc025f348
-p1-p0 equal 0x80 ?=128
-alloc page offset 512
-p2 0xffffffffc0262f48
-p2-p1 equal 0x180 ?=128+256
-alloc page offset 192
-p3 0xffffffffc025fd48
-p3-p1 equal 0x40 ?=64
-free page offset 0
-),free p0!
-free page offset 128
-),free p1!
-free page offset 192
-),free p3!
-alloc page offset 0
-p4 0xffffffffc025df48
-p2-p4 equal 0x200 ?=512
-alloc page offset 256
-p5 0xffffffffc0260748
-p5-p4 equal 0x100 ?=256
-free page offset 512
-),free p2!
-free page offset 0
-),free p4!
-free page offset 256
-),free p5!
-CHECK DONE!
+------------------------------maxorder 14
+You are going to check your code!!!
 check_alloc_page() succeeded!
 satp virtual address: 0xffffffffc0205000
 satp physical address: 0x0000000080205000

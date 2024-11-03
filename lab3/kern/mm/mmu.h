@@ -35,6 +35,7 @@
 // +---------+----+---+--------+--------+---------------+
 
 // page directory index
+//用掩码 0x1FF （即 9 位的最大值 511）取出目标字段的低 9 位
 #define PDX1(la) ((((uintptr_t)(la)) >> PDX1SHIFT) & 0x1FF)
 #define PDX0(la) ((((uintptr_t)(la)) >> PDX0SHIFT) & 0x1FF)
 

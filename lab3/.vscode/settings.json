@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "list.h": "c",
+        "swap_fifo.h": "c",
+        "vmm.h": "c"
+    }
+}

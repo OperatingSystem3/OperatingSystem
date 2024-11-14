@@ -23,9 +23,9 @@ PMP1: 0x0000000000000000-0xffffffffffffffff (A,R,W,X)
 
 Special kernel symbols:
   entry  0xc0200032 (virtual)
-  etext  0xc02043f8 (virtual)
-  edata  0xc020a040 (virtual)
-  end    0xc0211578 (virtual)
+  etext  0xc0204554 (virtual)
+  edata  0xc020a044 (virtual)
+  end    0xc021157c (virtual)
 Kernel executable memory footprint: 70KB
 memory management: default_pmm_manager
 membegin 80200000 memend 88000000 mem_size 7e00000
@@ -37,6 +37,9 @@ check_boot_pgdir() succeeded!
 check_vma_struct() succeeded!
 Store/AMO page fault
 page fault at 0x00000100: K/W
+Store/AMO page fault
+page fault at 0x00000100: K/W
+lru page fault at 0x100
 check_pgfault() succeeded!
 check_vmm() succeeded.
 SWAP: manager = clock swap manager

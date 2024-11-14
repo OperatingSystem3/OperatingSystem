@@ -7,6 +7,9 @@
 #include <pmm.h>
 #include <riscv.h>
 #include <swap.h>
+#include <swap_lru.h>
+
+extern bool test_swap_lru;
 
 /* 
   vmm design include two parts: mm_struct (mm) & vma_struct (vma)
@@ -329,6 +332,18 @@ volatile unsigned int pgfault_num=0;
  */
 int
 do_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr) {
+
+    // 如果启用了测试交换LRU（Least Recently Used，最少最近使用）功能
+    if(test_swap_lru) {
+        pte_t* temp = NULL;
+        // 获取地址addr对应的页表项（pte），并检查是否存在有效的映射（PTE_V表示有效，PTE_R表示可读）
+        temp = get_pte(mm->pgdir, addr, 0);
+        if(temp != NULL && (*temp & (PTE_V | PTE_R))) {
+            // 如果页表项有效且可读，调用lru_pgfault处理
+            return lru_pgfault(mm, error_code, addr);
+        }
+    }
+
     int ret = -E_INVAL;
     //try to find a vma which include addr
     struct vma_struct *vma = find_vma(mm, addr);
@@ -350,6 +365,12 @@ do_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr) {
     if (vma->vm_flags & VM_WRITE) {
         perm |= (PTE_R | PTE_W);
     }
+
+    // 如果启用了测试交换LRU功能，去除PTE_R权限
+    if(test_swap_lru) {
+        perm &= ~PTE_R;  // 去掉读权限
+    }
+
     addr = ROUNDDOWN(addr, PGSIZE);
 
     ret = -E_NO_MEM;

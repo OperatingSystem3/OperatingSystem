@@ -86,7 +86,7 @@ static struct proc_struct *
 alloc_proc(void) {
     struct proc_struct *proc = kmalloc(sizeof(struct proc_struct));
     if (proc != NULL) {
-    //LAB4:EXERCISE1 YOUR CODE
+    //LAB4:EXERCISE1 YOUR CODE:2212032
     /*
      * below fields in proc_struct need to be initialized
      *       enum proc_state state;                      // Process state
@@ -102,8 +102,30 @@ alloc_proc(void) {
      *       uint32_t flags;                             // Process flag
      *       char name[PROC_NAME_LEN + 1];               // Process name
      */
-
-
+    // 初始化进程的状态为 PROC_UNINIT，表示该进程尚未初始化完成
+    proc->state = PROC_UNINIT;
+    // 初始化进程ID为 -1，表示未分配有效进程ID
+    proc->pid = -1;
+    // 进程的运行次数初始化为 0，表示进程尚未运行
+    proc->runs = 0;
+    // 内核栈初始化为 0，表示该进程的内核栈尚未分配
+    proc->kstack = 0;
+    // 设置进程需要重新调度的标志为 0，表示当前不需要调度
+    proc->need_resched = 0;
+    // 初始化进程的父进程为 NULL，表示没有父进程（通常是 init 进程）
+    proc->parent = NULL;
+    // 进程的内存管理结构体 (mm_struct) 初始化为 NULL，表示没有内存管理信息
+    proc->mm = NULL;
+    // 将进程的上下文 (context) 清零，为了保证没有遗留的状态
+    memset(&(proc->context), 0, sizeof(struct context));
+    // 初始化进程的陷阱帧 (trapframe) 为 NULL，表示该进程还没有陷入中断或系统调用
+    proc->tf = NULL;
+    // 设置进程的 CR3 寄存器为 boot_cr3，通常是系统启动时的页目录表基地址
+    proc->cr3 = boot_cr3;
+    // 初始化进程的标志位为 0，表示没有特殊的进程标志
+    proc->flags = 0;
+    // 清空进程名称的字符串，确保没有随机的字符，长度为 PROC_NAME_LEN + 1
+    memset(proc->name, 0, PROC_NAME_LEN + 1);
     }
     return proc;
 }

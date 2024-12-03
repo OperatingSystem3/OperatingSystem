@@ -122,10 +122,12 @@ static int buddy2_alloc(struct buddy2* self, int size) {
             if (self[right_index].longest >= size) {
                 // 选择两个中内存块较小的
                 index = (self[left_index].longest <= self[right_index].longest) ? left_index : right_index;
-            } else {
+            } 
+            else {
                 index = left_index;  // 只有左子节点适合
             }
-        } else {
+        } 
+        else {
             index = right_index;  // 只有右子节点适合
         }
     }
@@ -177,13 +179,13 @@ buddy2_free(struct buddy2* self, int offset){
     // 实际的双链表信息复原后，还要对“二叉树”里面的节点信息进行更新
     node_size = 1;
     index = offset + self->size - 1;   //从原始的分配节点的最底节点开始改变longest
+    
     self[index].longest = node_size;   //这里是node_size，也就是从1那层开始改变
     while (index) {//向上合并，修改父节点的记录值
         index = PARENT(index);
         node_size *= 2;
         left_longest = self[LEFT_LEAF(index)].longest;
         right_longest = self[RIGHT_LEAF(index)].longest;
-        
         if (left_longest + right_longest == node_size) 
             self[index].longest = node_size;
         else

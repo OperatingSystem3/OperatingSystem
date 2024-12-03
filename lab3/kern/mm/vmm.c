@@ -399,7 +399,8 @@ do_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr) {
                                          //PT(Page Table) isn't existed, then
                                          //create a PT.
     if (*ptep == 0) {
-        if (pgdir_alloc_page(mm->pgdir, addr, perm) == NULL) {
+        if (pgdir_alloc_page(mm->pgdir, addr, perm) == NULL) {//进行分配和映射，应对pte为0的情况
+        //if这个函数中的内容就是进行了函数的动作
             cprintf("pgdir_alloc_page in do_pgfault failed\n");
             goto failed;
         }

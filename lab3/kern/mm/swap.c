@@ -42,8 +42,8 @@ swap_init(void)
         panic("bad max_swap_offset %08x.\n", max_swap_offset);
      }
 
-     test_swap_lru = true;
-     sm = &swap_manager_lru;
+     test_swap_lru = false;
+     sm = &swap_manager_clock;
 
      int r = sm->init();
      

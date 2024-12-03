@@ -86,24 +86,34 @@ static struct proc_struct *
 alloc_proc(void) {
     struct proc_struct *proc = kmalloc(sizeof(struct proc_struct));
     if (proc != NULL) {
-    //LAB4:EXERCISE1 YOUR CODE
-    /*
-     * below fields in proc_struct need to be initialized
-     *       enum proc_state state;                      // Process state
-     *       int pid;                                    // Process ID
-     *       int runs;                                   // the running times of Proces
-     *       uintptr_t kstack;                           // Process kernel stack
-     *       volatile bool need_resched;                 // bool value: need to be rescheduled to release CPU?
-     *       struct proc_struct *parent;                 // the parent process
-     *       struct mm_struct *mm;                       // Process's memory management field
-     *       struct context context;                     // Switch here to run process
-     *       struct trapframe *tf;                       // Trap frame for current interrupt
-     *       uintptr_t cr3;                              // CR3 register: the base addr of Page Directroy Table(PDT)
-     *       uint32_t flags;                             // Process flag
-     *       char name[PROC_NAME_LEN + 1];               // Process name
-     */
-
-
+        //LAB4:EXERCISE1 YOUR CODE
+        /*
+        * below fields in proc_struct need to be initialized
+        *       enum proc_state state;                      // Process state
+        *       int pid;                                    // Process ID
+        *       int runs;                                   // the running times of Proces
+        *       uintptr_t kstack;                           // Process kernel stack
+        *       volatile bool need_resched;                 // bool value: need to be rescheduled to release CPU?
+        *       struct proc_struct *parent;                 // the parent process
+        *       struct mm_struct *mm;                       // Process's memory management field
+        *       struct context context;                     // Switch here to run process
+        *       struct trapframe *tf;                       // Trap frame for current interrupt
+        *       uintptr_t cr3;                              // CR3 register: the base addr of Page Directroy Table(PDT)
+        *       uint32_t flags;                             // Process flag
+        *       char name[PROC_NAME_LEN + 1];               // Process name
+        */
+        proc->state  = PROC_UNINIT;
+        proc->pid = -1;
+        proc->runs = 0;
+        proc->kstack = 0;
+        proc->need_resched = 0;
+        proc->parent = NULL;
+        proc->mm = NULL;
+        memset(&(proc->context), 0, sizeof(struct context));
+        proc->tf = NULL;
+        proc->cr3 = boot_cr3;
+        proc->flags = 0;
+        memset(proc->name, 0, PROC_NAME_LEN);
     }
     return proc;
 }
@@ -136,12 +146,13 @@ get_pid(void) {
     }
     if (last_pid >= next_safe) {
     inside:
-        next_safe = MAX_PID;
+        next_safe = MAX_PID;// 设置右边界为最大值，后面再缩小这个范围到冲突的pid的位置
     repeat:
         le = list;
         while ((le = list_next(le)) != list) {
             proc = le2proc(le, list_link);
             if (proc->pid == last_pid) {
+                // 左边界超过了右边界，把右边界设置为最大值，再次循环
                 if (++ last_pid >= next_safe) {
                     if (last_pid >= MAX_PID) {
                         last_pid = 1;
@@ -150,11 +161,14 @@ get_pid(void) {
                     goto repeat;
                 }
             }
+            // 落在 (last_pid,next_safe) 的区间，这个范围内一定都没被占用
+            // 设置 next_safe，加速后续的 get_pid 过程
             else if (proc->pid > last_pid && next_safe > proc->pid) {
                 next_safe = proc->pid;
             }
         }
     }
+    // 如果 last_pid < next_safe，即落入区间，那么直接返回，O(1)
     return last_pid;
 }
 
@@ -163,7 +177,7 @@ get_pid(void) {
 void
 proc_run(struct proc_struct *proc) {
     if (proc != current) {
-        // LAB4:EXERCISE3 YOUR CODE
+        // LAB4:EXERCISE3 2211123
         /*
         * Some Useful MACROs, Functions and DEFINEs, you can use them in below implementation.
         * MACROs or Functions:
@@ -172,7 +186,16 @@ proc_run(struct proc_struct *proc) {
         *   lcr3():                   Modify the value of CR3 register
         *   switch_to():              Context switching between two processes
         */
-       
+       bool intr_flag;
+       struct proc_struct *prev = current;
+       local_intr_save(intr_flag);// 设置中断禁止
+       {
+        // 记录当前进程
+        current = proc;
+        lcr3(proc->cr3);//修改页表基址的地址
+        switch_to(&(prev->context), &(proc->context));// 切换上下文状态
+       }
+       local_intr_restore(intr_flag); // 设置中断启用
     }
 }
 
@@ -187,8 +210,10 @@ forkret(void) {
 // hash_proc - add proc into proc hash_list
 static void
 hash_proc(struct proc_struct *proc) {
-    list_add(hash_list + pid_hashfn(proc->pid), &(proc->hash_link));
+    list_add(hash_list + pid_hashfn(proc->pid), &(proc->hash_link));//将 proc->hash_link 链接到对应的哈希桶。
 }
+//使用 proc->pid 计算哈希值，确定进程在 hash_list 中的位置。
+//list_add 一般是一个双向链表操作函数，用于在链表头部插入节点。
 
 // find_proc - find proc frome proc hash_list according to pid
 struct proc_struct *
@@ -292,14 +317,33 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
      */
 
     //    1. call alloc_proc to allocate a proc_struct
-    //    2. call setup_kstack to allocate a kernel stack for child process
-    //    3. call copy_mm to dup OR share mm according clone_flag
-    //    4. call copy_thread to setup tf & context in proc_struct
-    //    5. insert proc_struct into hash_list && proc_list
-    //    6. call wakeup_proc to make the new child process RUNNABLE
-    //    7. set ret vaule using child proc's pid
+    if((proc = alloc_proc())== NULL){
+        goto fork_out;
+    }
 
-    
+    //    2. call setup_kstack to allocate a kernel stack for child process
+    if(setup_kstack(proc) != 0){
+        goto bad_fork_cleanup_proc;
+    }
+    //    3. call copy_mm to dup OR share mm according clone_flag
+    if(copy_mm(clone_flags, proc) != 0){
+        goto bad_fork_cleanup_kstack;
+    }
+
+    //    4. call copy_thread to setup tf & context in proc_struct
+    copy_thread(proc, stack, tf);
+
+    //    5. insert proc_struct into hash_list && proc_list
+    proc->pid = get_pid();
+    hash_proc(proc);
+    list_add(&proc_list,&(proc->list_link));
+    nr_process++;
+
+    //    6. call wakeup_proc to make the new child process RUNNABLE
+    wakeup_proc(proc);
+
+    //    7. set ret vaule using child proc's pid
+    ret = proc->pid;
 
 fork_out:
     return ret;
@@ -362,14 +406,14 @@ proc_init(void) {
 
     }
     
-    idleproc->pid = 0;
-    idleproc->state = PROC_RUNNABLE;
-    idleproc->kstack = (uintptr_t)bootstack;
-    idleproc->need_resched = 1;
+    idleproc->pid = 0;//idleproc是第0个内核线程
+    idleproc->state = PROC_RUNNABLE;//使得它从“出生”转到了“准备工作”，就差uCore调度它执行了
+    idleproc->kstack = (uintptr_t)bootstack;//uCore启动时设置的内核栈直接分配给idleproc使用
+    idleproc->need_resched = 1;//如果当前idleproc在执行，则只要此标志为1，马上就调用schedule函数要求调度器切换其他进程执行。
     set_proc_name(idleproc, "idle");
     nr_process ++;
 
-    current = idleproc;
+    current = idleproc;//当前进程是idleproc，0号进程
 
     int pid = kernel_thread(init_main, "Hello world!!", 0);
     if (pid <= 0) {

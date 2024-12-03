@@ -22,15 +22,13 @@ PMP1: 0x0000000000000000-0xffffffffffffffff (A,R,W,X)
 (THU.CST) os is loading ...
 Special kernel symbols:
   entry  0xffffffffc0200032 (virtual)
-  etext  0xffffffffc02014d2 (virtual)
+  etext  0xffffffffc0201a6a (virtual)
   edata  0xffffffffc0206018 (virtual)
-  end    0xffffffffc0206960 (virtual)
-Kernel executable memory footprint: 27KB
-memory management: slub_pmm_manager
+  end    0xffffffffc0206480 (virtual)
+Kernel executable memory footprint: 26KB
+memory management: best_fit_pmm_manager
 physcial memory map:
   memory: 0x0000000007e00000, [0x0000000080200000, 0x0000000087ffffff].
-------------------------------maxorder 14
-You are going to check your code!!!
 check_alloc_page() succeeded!
 satp virtual address: 0xffffffffc0205000
 satp physical address: 0x0000000080205000

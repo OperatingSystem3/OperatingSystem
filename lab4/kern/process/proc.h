@@ -9,10 +9,10 @@
 
 // process's state in his life cycle
 enum proc_state {
-    PROC_UNINIT = 0,  // uninitialized
-    PROC_SLEEPING,    // sleeping
-    PROC_RUNNABLE,    // runnable(maybe running)
-    PROC_ZOMBIE,      // almost dead, and wait parent proc to reclaim his resource
+    PROC_UNINIT = 0,  // uninitialized 未初始化状态
+    PROC_SLEEPING,    // sleeping 休眠、阻塞状态
+    PROC_RUNNABLE,    // runnable(maybe running) 可运行、就绪状态 
+    PROC_ZOMBIE,      // almost dead, and wait parent proc to reclaim his resource 僵尸状态(几乎已经终止，等待父进程回收其所占资源)
 };
 
 struct context {

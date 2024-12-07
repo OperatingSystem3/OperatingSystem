@@ -2692,7 +2692,7 @@ ffffffffc020133e:	8082                	ret
         perm &= ~PTE_R;  // 去掉读权限
 ffffffffc0201340:	ffd97913          	andi	s2,s2,-3
 ffffffffc0201344:	b765                	j	ffffffffc02012ec <do_pgfault+0x64>
-        if (pgdir_alloc_page(mm->pgdir, addr, perm) == NULL) {
+        if (pgdir_alloc_page(mm->pgdir, addr, perm) == NULL) {//进行分配和映射，应对pte为0的情况
 ffffffffc0201346:	6c88                	ld	a0,24(s1)
 ffffffffc0201348:	864a                	mv	a2,s2
 ffffffffc020134a:	85a2                	mv	a1,s0
@@ -2700,7 +2700,7 @@ ffffffffc020134c:	0fb020ef          	jal	ra,ffffffffc0203c46 <pgdir_alloc_page>
 ffffffffc0201350:	87aa                	mv	a5,a0
    ret = 0;
 ffffffffc0201352:	4501                	li	a0,0
-        if (pgdir_alloc_page(mm->pgdir, addr, perm) == NULL) {
+        if (pgdir_alloc_page(mm->pgdir, addr, perm) == NULL) {//进行分配和映射，应对pte为0的情况
 ffffffffc0201354:	fff9                	bnez	a5,ffffffffc0201332 <do_pgfault+0xaa>
             cprintf("pgdir_alloc_page in do_pgfault failed\n");
 ffffffffc0201356:	00004517          	auipc	a0,0x4

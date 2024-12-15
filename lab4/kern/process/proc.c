@@ -291,7 +291,9 @@ copy_thread(struct proc_struct *proc, uintptr_t esp, struct trapframe *tf) {
 
     // Set a0 to 0 so a child process knows it's just forked
     proc->tf->gpr.a0 = 0;
-    proc->tf->gpr.sp = (esp == 0) ? (uintptr_t)proc->tf : esp;
+    proc->tf->gpr.sp = (esp == 0) ? (uintptr_t)proc->tf : esp;//esp是栈
+    //如果 esp == 0，表示没有特定的栈地址要求，将 sp 设置为当前的 trapframe（即内核栈的栈顶）。
+    //如果 esp != 0，表示有指定的栈地址需求，将 sp 设置为传入的 esp 值。
 
     proc->context.ra = (uintptr_t)forkret;
     proc->context.sp = (uintptr_t)(proc->tf);

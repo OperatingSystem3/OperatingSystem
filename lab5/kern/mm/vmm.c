@@ -8,6 +8,7 @@
 #include <riscv.h>
 #include <swap.h>
 #include <kmalloc.h>
+#include <cow.h>
 
 /* 
   vmm design include two parts: mm_struct (mm) & vma_struct (vma)
@@ -422,7 +423,16 @@ do_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr) {
     ret = -E_NO_MEM;
 
     pte_t *ptep=NULL;
-  
+
+    // // 判断页表项权限，如果有效但是不可写，跳转到COW（写时复制）
+    // if ((ptep = get_pte(mm->pgdir, addr, 0)) != NULL) {  // 获取指定地址的页表项
+    //     // 判断页表项是否有效且不可写，PTE_V表示页表项有效，PTE_W表示页表项可写
+    //     if((*ptep & PTE_V) & ~(*ptep & PTE_W)) {
+    //         // 如果页表项有效且不可写，执行写时复制（COW）操作
+    //         return cow_pgfault(mm, error_code, addr); 
+    //     }
+    // }
+
     // try to find a pte, if pte's PT(Page Table) isn't existed, then create a PT.
     // (notice the 3th parameter '1')
     if ((ptep = get_pte(mm->pgdir, addr, 1)) == NULL) {

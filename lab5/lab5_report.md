@@ -13,8 +13,8 @@
   - [扩展练习 Challenge](#扩展练习-challenge)
     - [COW实现代码](#cow实现代码)
       - [1. 创建失败时执行，这两项与`proc.c`中相同：](#1-创建失败时执行这两项与procc中相同)
-      - [2. `do_pgfault`中添加判断页表项权限：](#2-do_pgfault中添加判断页表项权限)
-      - [3. 将`do_fork`函数中的`copy_mm`改为`cow_copy_mm`：](#3-将do_fork函数中的copy_mm改为cow_copy_mm)
+      - [2. `vmm.c`文件中`do_pgfault`中添加判断页表项权限：](#2-vmmc文件中do_pgfault中添加判断页表项权限)
+      - [3. `proc.c`文件中`do_fork`函数中的`copy_mm`改为`cow_copy_mm`：](#3-procc文件中do_fork函数中的copy_mm改为cow_copy_mm)
       - [4. 复制虚拟内存空间：](#4-复制虚拟内存空间)
       - [5. 只复制`mm`与`vma`，将页表项均指向原来的页：](#5-只复制mm与vma将页表项均指向原来的页)
       - [6. 设置页表项指向：](#6-设置页表项指向)
@@ -259,7 +259,7 @@ put_pgdir(struct mm_struct *mm) {
 }
 ```
 
-#### 2. `do_pgfault`中添加判断页表项权限：
+#### 2. `vmm.c`文件中`do_pgfault`中添加判断页表项权限：
 
 ```c
 // 判断页表项权限，如果有效但是不可写，跳转到COW（写时复制）
@@ -272,7 +272,7 @@ if ((ptep = get_pte(mm->pgdir, addr, 0)) != NULL) {  // 获取指定地址的页
 }
 ```
 
-#### 3. 将`do_fork`函数中的`copy_mm`改为`cow_copy_mm`：
+#### 3. `proc.c`文件中`do_fork`函数中的`copy_mm`改为`cow_copy_mm`：
 
 ```c
 // 原来使用 copy_mm 来复制进程的内存管理结构体
@@ -344,7 +344,6 @@ bad_mm:
 #### 5. 只复制`mm`与`vma`，将页表项均指向原来的页：
 
 ```c
-int
 int
 cow_copy_mmap(struct mm_struct *to, struct mm_struct *from) {
     // 断言 to 和 from 都不为 NULL
@@ -456,6 +455,8 @@ cow_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr) {
 
 至此，`make qemu`与`make grade`均能正常运行并通过。
 
+![alt text](image-2.png)
+
 ### 由于COW实现比较复杂，容易引入bug，请参考 https://dirtycow.ninja/ 看看能否在ucore的COW实现中模拟这个错误和解决方案。需要有解释。
 
 #### 1. 在`user/exit.c`文件中添加
@@ -479,19 +480,19 @@ kernel panic at kern/fs/swapfs.c:20:
 #### 3. 但是如果使用COW策略，则会正常运行：
 
 ```c
-*p = 0x5171101
+*p = 0xf0ef4c65
 Store/AMO page fault
-COW page fault at 0x800000
 Store/AMO page fault
-COW page fault at 0x7ffff000
 *p = 0x222
 waitpid 3 ok.
 exit pass.
 all user-mode processes have quit.
 init check memory pass.
-kernel panic at kern/process/proc.c:479:
+kernel panic at kern/process/proc.c:487:
     initproc exit.
 ```
+
+![alt text](image-1.png)
 
 这表明我们在`qemu`模拟出的磁盘上的`0x800588`处写入了数据`0x222`。
 

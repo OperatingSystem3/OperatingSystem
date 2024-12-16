@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <unistd.h>
+#include <cow.h>
 
 /* ------------- process/thread mechanism design&implementation -------------
 (an simplified Linux process/thread mechanism )
@@ -425,9 +426,16 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
         goto bad_fork_cleanup_kstack;
     }
 
-    if (copy_mm(clone_flags, proc) != 0) {
-        goto bad_fork_cleanup_proc;
+    // 原来使用 copy_mm 来复制进程的内存管理结构体
+    if(copy_mm(clone_flags, proc) != 0) {
+        goto bad_fork_cleanup_kstack;
     }
+    
+    // 改为使用 cow_copy_mm 来实现写时复制（COW）内存管理的复制
+    // if(cow_copy_mm(proc) != 0) {
+    //     // 如果 COW 复制失败，则进行错误处理，跳转到清理栈的逻辑
+    //     goto bad_fork_cleanup_kstack;
+    // }
 
     copy_thread(proc, stack, tf);
 

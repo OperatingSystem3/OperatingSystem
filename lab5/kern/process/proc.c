@@ -88,7 +88,7 @@ static struct proc_struct *
 alloc_proc(void) {
     struct proc_struct *proc = kmalloc(sizeof(struct proc_struct));
     if (proc != NULL) {
-    //LAB4:EXERCISE1 2212449
+    //LAB4:EXERCISE1 YOUR CODE : 2211123
     /*
      * below fields in proc_struct need to be initialized
      *       enum proc_state state;                      // Process state
@@ -110,7 +110,7 @@ alloc_proc(void) {
         proc->pid = -1;
         proc->cr3 = boot_cr3;//进程的页目录表
 
-     //LAB5 2212449 : (update LAB4 steps)
+     //LAB5 YOUR CODE : 2212449 : (update LAB4 steps)
      /*
      * below fields(add in LAB5) in proc_struct need to be initialized  
      *       uint32_t wait_state;                        // waiting state
@@ -203,7 +203,7 @@ get_pid(void) {
 void
 proc_run(struct proc_struct *proc) {
     if (proc != current) {
-        // LAB4:EXERCISE3 2212449
+        // LAB4:EXERCISE3 YOUR CODE : 2211123
         /*
         * Some Useful MACROs, Functions and DEFINEs, you can use them in below implementation.
         * MACROs or Functions:
@@ -387,7 +387,7 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
         goto fork_out;
     }
     ret = -E_NO_MEM;
-    //LAB4:EXERCISE2 2212449
+    //LAB4:EXERCISE2 YOUR CODE : 2211123
     /*
      * Some Useful MACROs, Functions and DEFINEs, you can use them in below implementation.
      * MACROs or Functions:
@@ -447,7 +447,7 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
     ret = proc->pid;
 
 
-    //LAB5 2212449 : (update LAB4 steps)
+    //LAB5 YOUR CODE : 2212449 : (update LAB4 steps)
     //TIPS: you should modify your written code in lab4(step1 and step5), not add more code.
    /* Some Functions
     *    set_links:  set the relation links of process.  ALSO SEE: remove_links:  lean the relation links of process 
@@ -648,7 +648,7 @@ load_icode(unsigned char *binary, size_t size) {
     // Keep sstatus
     uintptr_t sstatus = tf->status;
     memset(tf, 0, sizeof(struct trapframe));//清空trapframe
-    /* LAB5:EXERCISE1 2212449
+    /* LAB5:EXERCISE1 YOUR CODE : 2212449
      * should set tf->gpr.sp, tf->epc, tf->status
      * NOTICE: If we set trapframe correctly, then the user level process can return to USER MODE from kernel. So
      *          tf->gpr.sp should be user stack top (the value of sp)

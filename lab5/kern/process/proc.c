@@ -83,11 +83,12 @@ void forkrets(struct trapframe *tf);
 void switch_to(struct context *from, struct context *to);
 
 // alloc_proc - alloc a proc_struct and init all fields of proc_struct
+// 申请一个proc_struct结构体，并初始化
 static struct proc_struct *
 alloc_proc(void) {
     struct proc_struct *proc = kmalloc(sizeof(struct proc_struct));
     if (proc != NULL) {
-    //LAB4:EXERCISE1 YOUR CODE：2212032
+    //LAB4:EXERCISE1 2212449
     /*
      * below fields in proc_struct need to be initialized
      *       enum proc_state state;                      // Process state
@@ -103,42 +104,18 @@ alloc_proc(void) {
      *       uint32_t flags;                             // Process flag
      *       char name[PROC_NAME_LEN + 1];               // Process name
      */
+        memset(proc, 0, sizeof(struct proc_struct));//初始化proc_struct结构体
 
-     //LAB5 YOUR CODE : (update LAB4 steps)
+        proc->state = PROC_UNINIT;
+        proc->pid = -1;
+        proc->cr3 = boot_cr3;//进程的页目录表
+
+     //LAB5 2212449 : (update LAB4 steps)
      /*
      * below fields(add in LAB5) in proc_struct need to be initialized  
      *       uint32_t wait_state;                        // waiting state
      *       struct proc_struct *cptr, *yptr, *optr;     // relations between processes
      */
-        // 初始化进程的状态为 PROC_UNINIT，表示该进程尚未初始化完成
-        proc->state = PROC_UNINIT;
-        // 初始化进程ID为 -1，表示未分配有效进程ID
-        proc->pid = -1;
-        // 进程的运行次数初始化为 0，表示进程尚未运行
-        proc->runs = 0;
-        // 内核栈初始化为 0，表示该进程的内核栈尚未分配
-        proc->kstack = 0;
-        // 设置进程需要重新调度的标志为 0，表示当前不需要调度
-        proc->need_resched = 0;
-        // 初始化进程的父进程为 NULL，表示没有父进程（通常是 init 进程）
-        proc->parent = NULL;
-        // 进程的内存管理结构体 (mm_struct) 初始化为 NULL，表示没有内存管理信息
-        proc->mm = NULL;
-        // 将进程的上下文 (context) 清零，为了保证没有遗留的状态
-        memset(&(proc->context), 0, sizeof(struct context));
-        // 初始化进程的陷阱帧 (trapframe) 为 NULL，表示该进程还没有陷入中断或系统调用
-        proc->tf = NULL;
-        // 设置进程的 CR3 寄存器为 boot_cr3，通常是系统启动时的页目录表基地址
-        proc->cr3 = boot_cr3;
-        // 初始化进程的标志位为 0，表示没有特殊的进程标志
-        proc->flags = 0;
-        // 清空进程名称的字符串，确保没有随机的字符，长度为 PROC_NAME_LEN + 1
-        memset(proc->name, 0, PROC_NAME_LEN + 1);
-        //lab5新增
-        proc->wait_state = 0;
-        proc->cptr = NULL; // Child Pointer 表示当前进程的子进程
-        proc->optr = NULL; // Older Sibling Pointer 表示当前进程的上一个兄弟进程
-        proc->yptr = NULL; // Younger Sibling Pointer 表示当前进程的下一个兄弟进程
     }
     return proc;
 }
@@ -226,7 +203,7 @@ get_pid(void) {
 void
 proc_run(struct proc_struct *proc) {
     if (proc != current) {
-        // LAB4:EXERCISE3 YOUR CODE：2211123
+        // LAB4:EXERCISE3 2212449
         /*
         * Some Useful MACROs, Functions and DEFINEs, you can use them in below implementation.
         * MACROs or Functions:
@@ -235,16 +212,18 @@ proc_run(struct proc_struct *proc) {
         *   lcr3():                   Modify the value of CR3 register
         *   switch_to():              Context switching between two processes
         */
-       bool intr_flag;
-       struct proc_struct *prev = current;
-       local_intr_save(intr_flag);// 设置中断禁止
-       {
-        // 记录当前进程
+
+        bool intr_flag;
+        local_intr_save(intr_flag);
+
+        struct proc_struct *prev = current;
+        struct proc_struct *next = proc;
+
         current = proc;
-        lcr3(proc->cr3);//修改页表基址的地址
-        switch_to(&(prev->context), &(proc->context));// 切换上下文状态
-       }
-       local_intr_restore(intr_flag); // 设置中断启用
+        lcr3(proc->cr3);
+        switch_to(&(prev->context), &(next->context));
+
+        local_intr_restore(intr_flag);
     }
 }
 
@@ -335,6 +314,7 @@ put_pgdir(struct mm_struct *mm) {
 }
 
 // copy_mm - process "proc" duplicate OR share process "current"'s mm according clone_flags
+//         - 处理进程的内存空间
 //         - if clone_flags & CLONE_VM, then "share" ; else "duplicate"
 static int
 copy_mm(uint32_t clone_flags, struct proc_struct *proc) {
@@ -407,7 +387,7 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
         goto fork_out;
     }
     ret = -E_NO_MEM;
-    //LAB4:EXERCISE2 YOUR CODE: 2212449
+    //LAB4:EXERCISE2 2212449
     /*
      * Some Useful MACROs, Functions and DEFINEs, you can use them in below implementation.
      * MACROs or Functions:
@@ -433,7 +413,41 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
     //    6. call wakeup_proc to make the new child process RUNNABLE
     //    7. set ret vaule using child proc's pid
 
-    //LAB5 YOUR CODE : (update LAB4 steps)
+    proc = alloc_proc();//分配一个proc_struct
+    
+    if (proc == NULL) {
+        goto fork_out;
+    }
+
+    proc->parent = current;
+
+    if (setup_kstack(proc) != 0) {
+        goto bad_fork_cleanup_kstack;
+    }
+
+    if (copy_mm(clone_flags, proc) != 0) {
+        goto bad_fork_cleanup_proc;
+    }
+
+    copy_thread(proc, stack, tf);
+
+    bool intr_flag;
+    local_intr_save(intr_flag);
+    
+    proc->pid = get_pid();
+    hash_proc(proc);
+    // list_add(&proc_list, &(proc->list_link));
+    // nr_process++;
+    set_links(proc);
+
+    local_intr_restore(intr_flag);
+
+    wakeup_proc(proc);
+
+    ret = proc->pid;
+
+
+    //LAB5 2212449 : (update LAB4 steps)
     //TIPS: you should modify your written code in lab4(step1 and step5), not add more code.
    /* Some Functions
     *    set_links:  set the relation links of process.  ALSO SEE: remove_links:  lean the relation links of process 
@@ -441,24 +455,6 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
     *    update step 1: set child proc's parent to current process, make sure current process's wait_state is 0
     *    update step 5: insert proc_struct into hash_list && proc_list, set the relation links of process
     */
-
-    proc = alloc_proc();                // 分配并初始化一个新的进程结构体
-    proc->parent = current;             // 设置新进程的父进程为当前进程
-    assert(current->wait_state == 0);
-    setup_kstack(proc);                 // 为新进程设置内核栈
-    copy_mm(clone_flags, proc);         // 复制父进程的内存管理信息到新进程
-    copy_thread(proc, stack, tf);       // 复制线程信息，包括栈和寄存器状态 
-    bool intr_flag;
-    local_intr_save(intr_flag);
-    {
-        int pid = get_pid();           // 获取一个新的进程ID
-        proc->pid = pid;               // 设置新进程的进程ID 
-        hash_proc(proc);               //将proc_struct插入hash_list && proc_list
-        set_links(proc);
-    }
-    local_intr_restore(intr_flag);
-    wakeup_proc(proc);              // 调用wakeup_proc使新子进程RUNNABLE
-    ret = proc->pid;                  // 返回新进程的进程ID
  
 fork_out:
     return ret;
@@ -525,6 +521,7 @@ do_exit(int error_code) {
 }
 
 /* load_icode - load the content of binary program(ELF format) as the new content of current process
+- 加载二进制程序的内容（ELF格式）作为当前进程的新内容
  * @binary:  the memory addr of the content of binary program
  * @size:  the size of the content of binary program
  */
@@ -536,7 +533,7 @@ load_icode(unsigned char *binary, size_t size) {
 
     int ret = -E_NO_MEM;
     struct mm_struct *mm;
-    //(1) create a new mm for current process
+    //(1) create a new mm for current process - 为当前进程创建一个新的mm
     if ((mm = mm_create()) == NULL) {
         goto bad_mm;
     }
@@ -646,12 +643,12 @@ load_icode(unsigned char *binary, size_t size) {
     current->cr3 = PADDR(mm->pgdir);
     lcr3(PADDR(mm->pgdir));
 
-    //(6) setup trapframe for user environment
+    //(6) setup trapframe for user environment - 设置用户环境的trapframe
     struct trapframe *tf = current->tf;
     // Keep sstatus
     uintptr_t sstatus = tf->status;
-    memset(tf, 0, sizeof(struct trapframe));
-    /* LAB5:EXERCISE1 YOUR CODE:2211123
+    memset(tf, 0, sizeof(struct trapframe));//清空trapframe
+    /* LAB5:EXERCISE1 2212449
      * should set tf->gpr.sp, tf->epc, tf->status
      * NOTICE: If we set trapframe correctly, then the user level process can return to USER MODE from kernel. So
      *          tf->gpr.sp should be user stack top (the value of sp)
@@ -660,9 +657,11 @@ load_icode(unsigned char *binary, size_t size) {
      *          hint: check meaning of SPP, SPIE in SSTATUS, use them by SSTATUS_SPP, SSTATUS_SPIE(defined in risv.h)
      */
     tf->gpr.sp = USTACKTOP;
-    tf->epc = elf-> e_entry;
-    //用户态下，sstatus的SPP位清零，代表异常来自用户态，之后需要返回用户态；SPIE位清零，表示不启用中断。
-    tf->status = (read_csr(sstatus) & ~SSTATUS_SPP & ~SSTATUS_SPIE);
+    tf->epc = elf->e_entry;
+    // Set SPP to 0 so that we return to user mode
+    // Set SPIE to 1 so that we can handle interrupts
+    tf->status = (sstatus & ~SSTATUS_SPP) | SSTATUS_SPIE;
+
     ret = 0;
 out:
     return ret;
@@ -677,6 +676,7 @@ bad_mm:
 }
 
 // do_execve - call exit_mmap(mm)&put_pgdir(mm) to reclaim memory space of current process
+// - 调用exit_mmap（mm）和put_pgdir（mm）来回收当前进程的内存空间
 //           - call load_icode to setup new memory space accroding binary prog.
 int
 do_execve(const char *name, size_t len, unsigned char *binary, size_t size) {
@@ -694,11 +694,11 @@ do_execve(const char *name, size_t len, unsigned char *binary, size_t size) {
 
     if (mm != NULL) {
         cputs("mm != NULL");
-        lcr3(boot_cr3);
-        if (mm_count_dec(mm) == 0) {
-            exit_mmap(mm);
-            put_pgdir(mm);
-            mm_destroy(mm);
+        lcr3(boot_cr3); // switch to kernel page table
+        if (mm_count_dec(mm) == 0) { // if this process is the last user of this mm
+            exit_mmap(mm); // release all memory of this process
+            put_pgdir(mm); // release PDT
+            mm_destroy(mm); // release mm
         }
         current->mm = NULL;
     }
@@ -709,7 +709,7 @@ do_execve(const char *name, size_t len, unsigned char *binary, size_t size) {
     set_proc_name(current, local_name);
     return 0;
 
-execve_exit:
+execve_exit: // fail
     do_exit(ret);
     panic("already exit: %e.\n", ret);
 }
@@ -755,7 +755,7 @@ repeat:
             }
         }
     }
-    if (haskid) {
+    if (haskid) {//如果有子进程，且子进程不是僵尸进程，那么就让当前进程睡眠，等待子进程退出
         current->state = PROC_SLEEPING;
         current->wait_state = WT_CHILD;
         schedule();
@@ -923,4 +923,3 @@ cpu_idle(void) {
         }
     }
 }
-
